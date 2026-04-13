@@ -1,12 +1,17 @@
 import pandas as pd
 from sqlalchemy import create_engine
 import time
-
+import subprocess
 # --- CONFIGURATION ---
 # Replace 'your_password' with your actual PostgreSQL password in DBeaver.
 DB_USER = 'postgres'
 DB_PASS = '123456789'
-DB_HOST = '172.20.96.1'
+def get_wsl_host_ip():
+    cmd = "ip route show | grep default | awk '{print $3}'"
+    return subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
+
+DB_HOST = get_wsl_host_ip()
+print(f"Connecting to Windows Host at: {DB_HOST}")
 DB_PORT = '5432'
 DB_NAME = 'lendify_risk'
 
