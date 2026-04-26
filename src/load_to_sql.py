@@ -2,10 +2,13 @@ import pandas as pd
 from sqlalchemy import create_engine
 import time
 import subprocess
+import os
 # --- CONFIGURATION ---
 # Replace 'your_password' with your actual PostgreSQL password in DBeaver.
 DB_USER = 'postgres'
-DB_PASS = '123456789'
+DB_PASS = os.getenv('PG_PASSWORD')
+if not DB_PASS:
+    raise ValueError("Database password not found! Please set the PG_PASSWORD environment variable.")
 def get_wsl_host_ip():
     cmd = "ip route show | grep default | awk '{print $3}'"
     return subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
@@ -21,27 +24,30 @@ engine = create_engine(DB_URI)
 def load_csv_to_sql(csv_path, table_name):
     print(f"Starting load for {table_name} from {csv_path}...")
     start_time = time.time()
-    
-    # We use a 'chunksize' of 50,000 rows to keep memory usage low
     chunksize = 50000 
     
+    # Initialize a variable to keep an exact count of processed rows
+    total_rows_inserted = 0 
+    
     try:
-        # Read the CSV in chunks
-        for i, chunk in enumerate(pd.read_csv(csv_path, chunksize=chunksize, low_memory=False)):
+        # Removing low_memory=False is actually better here to save RAM during chunking
+        for i, chunk in enumerate(pd.read_csv(csv_path, chunksize=chunksize)):
             
-            # Standardize column names (lowercase, no spaces)
             chunk.columns = [col.lower().replace(' ', '_') for col in chunk.columns]
             
-            # 'replace' automatically creates the schema/table on chunk 0
             if i == 0:
                 chunk.to_sql(table_name, engine, if_exists='replace', index=False)
             else:
                 chunk.to_sql(table_name, engine, if_exists='append', index=False)
             
-            print(f"  -> Inserted chunk {i+1} (Rows: {(i+1)*chunksize})")
+            # Calculate the exact size of the current chunk and add it to our running total
+            current_chunk_size = len(chunk)
+            total_rows_inserted += current_chunk_size
+            
+            print(f"  -> Inserted chunk {i+1} ({current_chunk_size} rows) | Total so far: {total_rows_inserted}")
             
         end_time = time.time()
-        print(f"✅ Successfully loaded {table_name} in {round(end_time - start_time, 2)} seconds.\n")
+        print(f"✅ Successfully loaded {total_rows_inserted} rows into {table_name} in {round(end_time - start_time, 2)} seconds.\n")
         
     except Exception as e:
         print(f"❌ Error loading {table_name}: {e}")
